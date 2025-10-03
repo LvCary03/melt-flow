@@ -1,0 +1,171 @@
+diff --git a/SinglePhaseShockTube.py b/SinglePhaseShockTube.py
+index 5ea454a..fe284a5 100644
+--- a/SinglePhaseShockTube.py
++++ b/SinglePhaseShockTube.py
+@@ -1,18 +1,20 @@
+ 
+ import numpy as np
+ import matplotlib.pyplot as plt
++import math
+ 
++#import sys
++#np.set_printoptions(threshold=sys.maxsize)
+ 
+ #Set vars
+-n = 1000 #   #number of grid points
++n = 100 #   #number of grid points
+ l = 10 #m   #total length of tube
+-cfl = .5 #s #time step
+-tf = 4 #s   #time to run
++cfl = .1 #s #time step
++omega = (cfl + 1/cfl)/2
++tf = .01 #s   #time to run
+ x0 = 5 #m
+ gamma = 1.4
+ dx = l / (n-1)
+-#print(dx)
+-
+ 
+ #Set initial values
+ P_left = 1 #Pa
+@@ -28,12 +30,10 @@ roe = np.zeros((n+2))
+ W = np.zeros((3, n+2))
+ E = np.zeros((n+2))
+ 
+-#P[0:n/2 +1] = p_left
+-#Set initials
+-
+-#roe * u
+-#E = p/(gamma-1) + u^2
++#m = roe * u    momentum is density times velocity
++#E = p/(gamma-1) + u^2  
+ 
++#Set up the initial matricies
+ x = np.linspace(0, l, n+2)
+ for i in range(len(x)):
+     if (x[i] < x0):
+@@ -46,7 +46,7 @@ for i in range(len(x)):
+         u[i] = u_right
+     W[0, i] = roe[i]
+     W[1, i] = roe[i] * u[i]
+-    W[2, i] = P[i] / gamma + u[i]**2
++    W[2, i] = P[i] / gamma + u[i]**2    #Potential break here. Wrong formula ???
+ 
+ 
+ #roe^n+1_i = roe^n_i + ( roe^n_i+1 - roe^n_i-1 ) / dx**2
+@@ -54,31 +54,26 @@ for i in range(len(x)):
+ # sigma = max(abs(u)+c)*dt/dx
+ # dt = (sigma * dx) / (max(abs(u) + c))
+ 
+-
+ # F(U) = [  m 
+ #          (m^2/roe) + P
+ #          (m/roe)(e + P)  ]
+ 
+ # alpha = omega * (dt/dx)*(u + c)
+ 
+-run = True
++No_blowup = True
+ total_time = tf
+ current_time = 0
+-while(current_time < total_time):
+-    omega = .75
++while((current_time < total_time) and (No_blowup)):
+     uc_max = 0
+     F = np.zeros((3, n+2))
+     alpha = np.zeros(n+2)
+     for j in range(len(P)):
+         m = roe[j] * u[j]
+         e = P[j]/(gamma - 1) + (u[j])**2
+-        #print("e =", e)
+-        #print((m/roe)*(e + P[j]))
+         F[0, j] = m
+         F[1, j] = ((m**2)/roe[j]) + P[j]
+         F[2, j] = (m/roe[j])*(e + P[j])
+ 
+-
+         c = np.sqrt(gamma*P[j]/roe[j])
+         if ((abs(u[j]) + c ) > uc_max):
+             uc_max = (abs(u[j] + c))
+@@ -89,15 +84,12 @@ while(current_time < total_time):
+         alpha[j] = omega * (dt/dx)*(u[j] + c)
+ 
+ 
+-
+-
+     Fn = F.copy()
+     Wn = W.copy()
+-
+     alphan = alpha.copy()
+ 
+ 
+-    for k in range(1, (len(P)-1)):
++    for k in range(1, (len(P)-1)):      #Potential error, should all matricies in the equation be 'new'
+         W[:, k] = (Wn[:, k] -
+                    (dt/(2*dx))*(F[:, k+1] - F[:, k-1]) +
+                    (1/4)*(((alpha[k+1] + alpha[k])*(Wn[:, k+1] - Wn[:, k])) - 
+@@ -107,22 +99,46 @@ while(current_time < total_time):
+ 
+     # E = e + V^2 / 2
+     for l in range(1, (len(P)-1)):
+-        E[l] = W[2, l] + (u[l]**2)/2
++        
++        if (math.isnan(W[0, l])):
++            print("code broke here roe")
++            No_blowup = False
++            break
++        roe[l] = W[0, l]            #Potential break. We just assign our old density to be out new density
++        
++        if (math.isnan(u[l])):
++            print("code broke here u")
++            No_blowup = False
++            break
+         u[l] = W[1, l] / roe[l]
++        
++        if (math.isnan(E[l])):
++            print("code broke here E")
++            No_blowup = False
++            break
++        E[l] = W[2, l] + (u[l]**2)/2
++        
++        if (math.isnan(P[l])):
++            print("code broke here P ")
++            No_blowup = False
++            break
++        P[l] = (W[2, l] - u[l]**2) * gamma
+ 
++    current_time += dt
+ 
+ 
+-    #run = False
+-    current_time += dt
+ 
+ 
++
++#Print outputs
+ print("current_time = ", current_time)
+-#print("Pressure matrix =", P)
++print("Pressure matrix =", P)
+ #print("Density matrix =", roe)
+ #print("\nConserved variables\nDensity=", W[0],'\nMomentum=', W[1], '\nEnergy=', W[2])
+ #print("F = ", F)
+ 
+ 
++#Give the plots for all the variables
+ fig, axs = plt.subplots(2, 2)
+ 
+ # Plot on the first subplot (top-left)
+@@ -141,12 +157,4 @@ axs[1, 0].set_title('Energy')
+ axs[1, 1].plot(P, color='red')
+ axs[1, 1].set_title('Pressure')
+ 
+-
+-
+-
+-
+-
+-#plt.plot(W[0], label = 'density')
+-#plt.plot(W[1], label = 'momentum')
+-#plt.plot(W[2], label = 'energy')
+ plt.show()
+\ No newline at end of file
