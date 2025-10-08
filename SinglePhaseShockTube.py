@@ -9,10 +9,10 @@ import math
 #Set vars
 n = 100 #   #number of grid points
 l = 10 #m   #total length of tube
-cfl = .001 #s #time step
+cfl = .1 #s #time step
 omega = (cfl + 1/cfl)/2
 
-tf = .01 #s   #time to run
+tf = 1 #s   #time to run
 
 x0 = 5 #m
 gamma = 1.4
@@ -44,12 +44,14 @@ for i in range(len(x)):
         U[0, i] = P_left
         U[1, i] = roe_left
         U[2, i] = u_left
-        U[3, i] = U[1, i] * ((U[0, i] / ((gamma -1) * U[1, i])) + .5 * (U[2, i]**2))
+        #U[3, i] = U[1, i] * ((U[0, i] / ((gamma -1) * U[1, i])) + .5 * (U[2, i]**2))
+        U[3, i] = U[0, i] / ((gamma - 1) * U[1, i])
     else:
         U[0, i] = P_right
         U[1, i] = roe_right
         U[2, i] = u_right
-        U[3, i] = U[1, i] * ((U[0, i] / ((gamma -1) * U[1, i])) + .5 * (U[2, i]**2))
+        #U[3, i] = U[1, i] * ((U[0, i] / ((gamma -1) * U[1, i])) + .5 * (U[2, i]**2))
+        U[3, i] = U[0, i] / ((gamma - 1) * U[1, i])
 
 
 def primsToCons(U, list_length):
@@ -57,7 +59,8 @@ def primsToCons(U, list_length):
         W[0, i] = U[1, i]
         W[1, i] = U[1, i] * U[2, i]
         #Equation to use for internal energy e = P / ((gamma - 1) * roe)
-        W[2, i] = U[0, i] / ((gamma - 1) * U[1, i])
+        #W[2, i] = U[0, i] / ((gamma - 1) * U[1, i])
+        W[2, i] = U[1, i] * ((U[0, i] / ((gamma -1) * U[1, i])) + .5 * (U[2, i]**2))
     return W
 
 
@@ -70,11 +73,11 @@ def consToPrims(W, gamma, list_length, No_blowup):
             break
         U[1, l] = W[0, l]
         
-        if (math.isnan(W[1, l] / U[1, l])):
+        if (math.isnan(W[1, l] / U[0, l])):
             print("code broke here u")
             No_blowup = False
             break
-        U[2, l] = W[1, l] / U[1, l]
+        U[2, l] = W[1, l] / U[0, l]
         
         #E = roe * (e + 1/2 u^2)
         # where e = P / ((gamma - 1) * roe)
@@ -84,14 +87,16 @@ def consToPrims(W, gamma, list_length, No_blowup):
             print("code broke here E")
             No_blowup = False
             break
-        U[3, l] = U[1, l] * ((U[0, l] / ((gamma -1) * U[1, l])) + .5 * (U[2, l]**2))
+        #U[3, l] = U[1, l] * ((U[0, l] / ((gamma -1) * U[1, l])) + .5 * (U[2, l]**2))
+        U[3, l] = ((W[2, l] - (.5 * W[0, l] *(W[1, l]/W[0, l])**2))*(gamma - 1))/((gamma -1) * W[0, l])
         
         if (math.isnan( W[2, l] * (gamma - 1) * U[1, l] )):
             print("code broke here P ")
             No_blowup = False
             break
-        U[0, l] = W[2, l] * (gamma - 1) * U[1, l]
-        return U, No_blowup
+        #U[0, l] = W[2, l] * (gamma - 1) * U[1, l]
+        U[0, l] = (W[2, l] - (.5 * W[0, l] *(W[1, l]/W[0, l])**2))*(gamma - 1)
+    return U, No_blowup
 
 
 
@@ -117,19 +122,18 @@ def calculate_alpha(list_length, cfl, dx, gamma):
         #print("Time step = ", dt)
 
         alpha[i] = omega * (dt/dx)*(U[2, i] + c)
-        return alpha, dt
+    return alpha, dt
 
 def calculate_F(U, gamma, list_length):
     F = np.zeros((3, list_length))
     
     for j in range(list_length):
         #m = roe[j] * u[j]
-        #e = (P[j]/(gamma - 1)) + (u[j])**2 ###Most definetely the wrong equaton
         #F[0, j] = m
         F[0, j] = U[1, j] * U[2, j]
         F[1, j] = (((U[1, j] * U[2, j])**2) / U[1, j]) + U[0, j]
         F[2, j] = (U[1, j] * U[2, j] / U[1, j]) * ((U[0, j]/((gamma - 1) * U[1, j])) + U[0, j])
-        return F
+    return F
 
 
 
@@ -151,17 +155,19 @@ while((current_time < total_time) and (No_blowup)):
     Wn = W.copy()
 
 
-    #for k in range(1, (len(alpha)-1)):
-     #   Wn[:, k] = (W[:, k] -
-      #             (dt/(2*dx))*(F[:, k+1] - F[:, k-1]) +
-       #            (1/4)*(((alpha[k+1] + alpha[k])*(W[:, k+1] - W[:, k])) - 
-        #                  (alpha[k] - alpha[k-1])*(W[:, k] - W[:, k-1])))
+    for k in range(1, (len(alpha)-1)):
+        Wn[:, k] = (W[:, k] -
+                   (dt/(2*dx))*(F[:, k+1] - F[:, k-1]) +
+                   (1/4)*(((alpha[k+1] + alpha[k])*(W[:, k+1] - W[:, k])) - 
+                          (alpha[k] - alpha[k-1])*(W[:, k] - W[:, k-1])))
         
     W = Wn.copy()
 
     U, No_blowup = consToPrims(W, gamma, list_length, No_blowup)
 
     print(U[2])
+    #print("f1 = ", F[])
+    print("F = ", F)
   
 
     current_time += dt
@@ -199,6 +205,25 @@ axs[1, 0].set_title('Energy')
 # Plot on the fourth subplot (bottom-right)
 axs[1, 1].plot(U[0], color='red')
 axs[1, 1].set_title('Pressure')
+
+
+fig2, axs2 = plt.subplots(2, 2)
+
+# Plot on the first subplot (top-left)
+axs2[0, 0].plot(W[1])
+axs2[0, 0].set_title('W 1')
+
+# Plot on the second subplot (top-right)
+axs2[0, 1].plot(W[2], color='orange')
+axs2[0, 1].set_title('W 2')
+
+# Plot on the third subplot (bottom-left)
+#axs2[1, 0].plot(U[3], color='green')
+#axs2[1, 0].set_title('Energy')
+
+# Plot on the fourth subplot (bottom-right)
+axs2[1, 1].plot(W[0], color='red')
+axs2[1, 1].set_title('W 0')
 
 plt.show()
 
