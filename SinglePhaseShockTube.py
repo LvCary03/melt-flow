@@ -41,16 +41,18 @@ U = np.zeros((4, list_length))
 x = np.linspace(0, l, list_length)
 for i in range(len(x)):
     if (x[i] < x0):
-        U[0] = P_left
-        U[1] = roe_left
-        U[2] = u_left
+        U[0, i] = P_left
+        U[1, i] = roe_left
+        U[2, i] = u_left
+        U[3, i] = U[1, i] * ((U[0, i] / ((gamma -1) * U[1, i])) + .5 * (U[2, i]**2))
     else:
-        U[0] = P_right
-        U[1] = roe_right
-        U[2] = u_right
+        U[0, i] = P_right
+        U[1, i] = roe_right
+        U[2, i] = u_right
+        U[3, i] = U[1, i] * ((U[0, i] / ((gamma -1) * U[1, i])) + .5 * (U[2, i]**2))
 
 
-def primsToCons():
+def primsToCons(U, list_length):
     for i in range(list_length):
         W[0, i] = U[1, i]
         W[1, i] = U[1, i] * U[2, i]
@@ -129,15 +131,18 @@ def calculate_F(U, gamma, list_length):
         F[2, j] = (U[1, j] * U[2, j] / U[1, j]) * ((U[0, j]/((gamma - 1) * U[1, j])) + U[0, j])
         return F
 
+
+
 No_blowup = True
 total_time = tf
 current_time = 0
 while((current_time < total_time) and (No_blowup)):
 #for step in range(1):
 
+    print(U[2])
 
-    #W = primsToCons(U, list_length)
-    W = primsToCons()
+    W = primsToCons(U, list_length)
+
 
     alpha, dt = calculate_alpha(list_length, cfl, dx, gamma)
 
@@ -145,15 +150,18 @@ while((current_time < total_time) and (No_blowup)):
 
     Wn = W.copy()
 
-    for k in range(1, (len(alpha)-1)):
-        Wn[:, k] = (W[:, k] -
-                   (dt/(2*dx))*(F[:, k+1] - F[:, k-1]) +
-                   (1/4)*(((alpha[k+1] + alpha[k])*(W[:, k+1] - W[:, k])) - 
-                          (alpha[k] - alpha[k-1])*(W[:, k] - W[:, k-1])))
+
+    #for k in range(1, (len(alpha)-1)):
+     #   Wn[:, k] = (W[:, k] -
+      #             (dt/(2*dx))*(F[:, k+1] - F[:, k-1]) +
+       #            (1/4)*(((alpha[k+1] + alpha[k])*(W[:, k+1] - W[:, k])) - 
+        #                  (alpha[k] - alpha[k-1])*(W[:, k] - W[:, k-1])))
         
     W = Wn.copy()
 
     U, No_blowup = consToPrims(W, gamma, list_length, No_blowup)
+
+    print(U[2])
   
 
     current_time += dt
@@ -163,7 +171,7 @@ while((current_time < total_time) and (No_blowup)):
 
 #Print outputs
 print("current_time = ", current_time)
-print("Pressure matrix =", U[0])
+#print("Pressure matrix =", U[0])
 if (No_blowup):
     print("The system did not blowup")
 else:
@@ -177,7 +185,7 @@ else:
 fig, axs = plt.subplots(2, 2)
 
 # Plot on the first subplot (top-left)
-axs[0, 0].plot(W[1])
+axs[0, 0].plot(U[1])
 axs[0, 0].set_title('Density')
 
 # Plot on the second subplot (top-right)
