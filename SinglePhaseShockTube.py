@@ -116,7 +116,7 @@ def mainLoop(Wn, W, alpha, F):
 # alpha = omega * (dt/dx)*(u + c)
 
 
-def calculate_alpha(list_length, cfl, dx, gamma): # What max do i use for alpha
+def calculate_alpha(U, list_length, cfl, dx, gamma): # What max do i use for alpha
     uc_max = 0
     alpha = np.zeros(list_length)
     for i in range(list_length):
@@ -138,7 +138,8 @@ def calculate_F(U, gamma, list_length):
         #F[0, j] = m
         F[0, j] = U[1, j] * U[2, j]
         F[1, j] = (((U[1, j] * U[2, j])**2) / U[1, j]) + U[0, j]
-        F[2, j] = (U[1, j] * U[2, j] / U[1, j]) * ((U[0, j]/((gamma - 1) * U[1, j])) + U[0, j])
+        #F[2, j] = (U[1, j] * U[2, j] / U[1, j]) * ((U[0, j]/((gamma - 1) * U[1, j])) + U[0, j])
+        F[2, j] = (U[1, j] * U[2, j] / U[1, j]) * ((U[1, j] * ((U[0, j] / ((gamma -1) * U[1, j])) + .5 * (U[2, j]**2))) + U[0, j])
     return F
 
 
@@ -146,14 +147,14 @@ No_blowup = True
 total_time = tf
 current_time = 0
 #while((current_time < total_time) and (No_blowup)):
-for step in range(1):
+for step in range(2):
 
     print(U[2])
 
     W = primsToCons(U, list_length)
 
 
-    alpha, dt = calculate_alpha(list_length, cfl, dx, gamma)
+    alpha, dt = calculate_alpha(U, list_length, cfl, dx, gamma)
 
     F = calculate_F(U, gamma, list_length)
 
