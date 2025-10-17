@@ -9,10 +9,10 @@ import math
 #Set vars
 n = 100 #   #number of grid points
 l = 10 #m   #total length of tube
-cfl = .01 #s #time step
+cfl = .05 #s #time step
 omega = (cfl + 1/cfl)/2
 
-tf = .005 #s   #time to run
+tf = .3 #s   #time to run
 
 x0 = 5 #m
 gamma = 1.4
@@ -65,37 +65,39 @@ def primsToCons(U, list_length):
 
 
 def consToPrims(W, gamma, list_length, No_blowup):
-    for l in range(1, list_length-1): ###Should I include the boarder cases ???
-        
-        if (math.isnan(W[0, l])):
-            print("code broke here roe")
+    # Convert conserved W -> primitive U.
+    # Here W[0] = rho, W[1] = momentum, W[2] = total energy per volume (rho*(e + 0.5 u^2))
+    for idx in range(1, list_length-1):
+        rho = W[0, idx]
+        mom = W[1, idx]
+        E   = W[2, idx]
+
+        if rho <= 0 or math.isnan(rho):
+            print("code broke here: rho nonpositive or NaN at", idx, rho)
             No_blowup = False
             break
-        U[1, l] = W[0, l]
-        
-        if (math.isnan(W[1, l] / U[0, l])):
-            print("code broke here u")
+        U[1, idx] = rho
+
+        u = mom / rho        # THIS is the correct velocity calculation
+        if math.isnan(u) or abs(u) > 1e12:
+            print("code broke here: u invalid at", idx, u)
             No_blowup = False
             break
-        U[2, l] = W[1, l] / U[0, l]
-        
-        #E = roe * (e + 1/2 u^2)
-        # where e = P / ((gamma - 1) * roe)
-        #U[1, l] * ((U[0, l] / ((gamma -1) * U[1, l])) + .5 * (U[2, l]**2))
-    
-        if (math.isnan(U[1, l] * ((U[0, l] / ((gamma -1) * U[1, l])) + .5 * (U[2, l]**2)))):
-            print("code broke here E")
+        U[2, idx] = u
+
+        # internal energy per mass: e = (E/rho) - 0.5*u^2
+        e = (E / rho) - 0.5 * u**2
+        if math.isnan(e):
+            print("code broke here: e invalid at", idx, e)
             No_blowup = False
             break
-        #U[3, l] = U[1, l] * ((U[0, l] / ((gamma -1) * U[1, l])) + .5 * (U[2, l]**2))
-        U[3, l] = ((W[2, l] - (.5 * W[0, l] *(W[1, l]/W[0, l])**2))*(gamma - 1))/((gamma -1) * W[0, l])
-        
-        if (math.isnan( W[2, l] * (gamma - 1) * U[1, l] )):
-            print("code broke here P ")
-            No_blowup = False
-            break
-        #U[0, l] = W[2, l] * (gamma - 1) * U[1, l]
-        U[0, l] = (W[2, l] - (.5 * W[0, l] *(W[1, l]/W[0, l])**2))*(gamma - 1)
+
+        # pressure: P = (gamma - 1) * rho * e
+        P = (gamma - 1) * rho * e
+        U[0, idx] = P
+
+        # store e per mass optionally in U[3], or store total energy per mass: e + 0.5 u^2
+        U[3, idx] = e #+ 0.5 * u**2 # I just want this one as the same internal energy
     return U, No_blowup
 
 def mainLoop(Wn, W, alpha, F):
@@ -104,6 +106,11 @@ def mainLoop(Wn, W, alpha, F):
                    (dt/(2*dx))*(F[:, k+1] - F[:, k-1]) +
                    (1/4)*(((alpha[k+1] + alpha[k])*(W[:, k+1] - W[:, k])) - 
                           (alpha[k] - alpha[k-1])*(W[:, k] - W[:, k-1])))
+        
+    # I think here is where I set boundary conditions
+    Wn[:, 0] = Wn[:, 1].copy()
+    Wn[:, -1] = Wn[:, -2].copy()
+        
     return Wn, W, alpha, F
 
 # sigma = max(abs(u)+c)*dt/dx
@@ -116,18 +123,19 @@ def mainLoop(Wn, W, alpha, F):
 # alpha = omega * (dt/dx)*(u + c)
 
 
-def calculate_alpha(U, list_length, cfl, dx, gamma): # What max do i use for alpha
+def calculate_alpha(U, list_length, cfl, dx, gamma):
     uc_max = 0
     alpha = np.zeros(list_length)
     for i in range(list_length):
         c = np.sqrt(gamma * U[0, i] / U[1, i])
         if ((abs(U[2, i]) + c ) > uc_max):
-            uc_max = (abs(U[2, i] + c))
+            uc_max = abs(U[2, i]) + c
 
-        dt = (cfl * dx) / (uc_max)
+    dt = (cfl * dx) / (uc_max)
         #print("Time step = ", dt)
-
-        alpha[i] = omega * (dt/dx)*(U[2, i] + c)
+    for j in range(list_length):
+        c = np.sqrt(gamma * U[0, j] / U[1, j])
+        alpha[j] = omega * (dt/dx)*(U[2, j] + c)
     return alpha, dt
 
 def calculate_F(U, gamma, list_length):
@@ -146,8 +154,8 @@ def calculate_F(U, gamma, list_length):
 No_blowup = True
 total_time = tf
 current_time = 0
-#while((current_time < total_time) and (No_blowup)):
-for step in range(2):
+while((current_time < total_time) and (No_blowup)):
+#for step in range(2):
 
     print(U[2])
 
