@@ -13,7 +13,7 @@ l = 10 #m   #total length of tube
 cfl = .05 #s #time step
 omega = (cfl + 1/cfl)/2
 
-tf = .3 #s   #time to run
+tf = .5 #s   #time to run
 
 x0 = 5 #m
 gamma = 1.4
@@ -35,9 +35,6 @@ list_length = n + 2*ghost_cells
 W = np.zeros((3, list_length))
 U = np.zeros((4, list_length))
 
-
-#U_ex_L = np.zeros((3, list_length/2))
-#U_ex_R = np.zeros((3, list_length/2))
 
 U_ex_L = [roe_left, u_left, P_left]
 U_ex_R = [roe_right, u_right, P_right]
@@ -176,7 +173,6 @@ current_time = 0
 while((current_time < total_time) and (No_blowup)):
 #for step in range(40*4):
 
-    #print(U[2])
 
     W = primsToCons(U, list_length)
 
@@ -200,11 +196,6 @@ while((current_time < total_time) and (No_blowup)):
 
     U, No_blowup = consToPrims(W, gamma, list_length, No_blowup)
 
-
-    #print(U[2])
-    #print("F = ", F)
-  
-
     current_time += dt
 
 
@@ -223,8 +214,8 @@ def riemann_exact(gamma,x0,x,tf,U_L,U_R):
     u_R = U_R[1]                            #% Velocity at driven end 
     p_R = U_R[2]                            #% Pressure at driven end 
     x_i = min(x)  
-    x_f = max(x)              #% Grid dimensions
-    npt = len(x)               #          % # of grid points
+    x_f = max(x)                            #% Grid dimensions
+    npt = len(x)                            #% number of grid points
 
     p_4 = p_L
     rho_4 = rho_L
@@ -235,7 +226,7 @@ def riemann_exact(gamma,x0,x,tf,U_L,U_R):
     gam_m = gamma-1                          #% Specific heat ratio notation
     gam_p = gamma+1
     gam_r = gam_p/gam_m
-    p4op1 = p_4/p_1                        #% Driver/driven end pressure ratio
+    p4op1 = p_4/p_1                          #% Driver/driven end pressure ratio
     print(f"value of roe {rho_4}")
     a_4 = math.sqrt(gamma*p_4/rho_4)
     a_1 = math.sqrt(gamma*p_1/rho_1)
@@ -265,15 +256,6 @@ def riemann_exact(gamma,x0,x,tf,U_L,U_R):
     a = np.zeros(npt)
     p = np.zeros(npt)
     rho = np.zeros(npt)
-    '''u = []
-    a = []
-    p = []
-    rho = []
-    for i in range(1, npt):
-        u.append(0)
-        a.append(0)
-        p.append(0)
-        rho.append(0)'''
 
     for i in range(1,npt):
         if (x[i] < x_4):
@@ -303,16 +285,18 @@ def riemann_exact(gamma,x0,x,tf,U_L,U_R):
             rho[i] = rho_1
 
     print("important new variables")
-    print(u, a, p)
-    plt.plot(u)
+    #print(u, a, p)
+    #plt.plot(u)
     #plt.figure()
     #plt.plot(a)
-    plt.figure()
-    plt.plot(p)
+    #plt.figure()
+    #plt.plot(p)
+
+    return u, a, p, rho
 
 print("Working on exact solution")
 #Call the function
-riemann_exact(gamma,x0,x,tf,U_ex_L,U_ex_R)
+u, a, p, rho = riemann_exact(gamma,x0,x,tf,U_ex_L,U_ex_R)
 
 
 #Print outputs
@@ -329,13 +313,16 @@ else:
 def plotElementary():
     #Give the plots for all the variables
     fig, axs = plt.subplots(2, 3)
+    #fig, axs = plt.subplots(2, 2)
 
     # Plot on the first subplot (top-left)
     axs[0, 0].plot(U[1])
+    axs[0, 0].plot(rho)
     axs[0, 0].set_title('Density')
 
     # Plot on the second subplot (top-right)
     axs[0, 1].plot(U[2], color='orange')
+    axs[0, 1].plot(u)
     axs[0, 1].set_title('Velocity')
 
     # Plot on the third subplot (bottom-left)
@@ -344,11 +331,13 @@ def plotElementary():
 
     # Plot on the fourth subplot (bottom-right)
     axs[1, 1].plot(U[0], color='red')
+    axs[1, 1].plot(p)
     axs[1, 1].set_title('Pressure')
 
     # Plot on the fourth subplot (bottom-right)
-    #axs[0, 2].plot(c_mat, color='blue')
-    #axs[0, 2].set_title('sound')
+    axs[0, 2].plot(c_mat, color='blue')
+    axs[0, 2].plot(a)
+    axs[0, 2].set_title('sound')
 
 
 def plotConserved():
